@@ -1,0 +1,30 @@
+FROM nvidia/cuda:12.1.1-cudnn8-runtime-rockylinux8
+
+# Set working directory
+WORKDIR /app
+
+# Install Python 3.11, pip, git, and ninja-build from EPEL repository
+RUN dnf install -y epel-release && \
+    dnf install -y python3.11 python3.11-pip git && \
+    dnf clean all
+
+# Make python3.11 the default
+RUN alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
+RUN alternatives --install /usr/bin/pip3 pip3 /usr/bin/pip3.11 1
+
+# Copy only requirements.txt first to leverage Docker cache
+COPY requirements.txt /app/requirements.txt
+
+# Install dependencies (including FairScale)
+RUN pip3 install --no-cache-dir -r requirements.txt
+
+# Now copy your training script and the rest of the application code
+COPY vanilla.py /app/vanilla.py
+
+# Expose NCCL ports for distributed training
+ENV NCCL_SOCKET_IFNAME=eth0
+ENV NCCL_DEBUG=INFO
+ENV NCCL_P2P_LEVEL=NVL
+
+# Run the training job
+CMD ["python3", "vanilla.py", "--batch_size=32", "--lr=1e-4", "--strategy=ddp"]
